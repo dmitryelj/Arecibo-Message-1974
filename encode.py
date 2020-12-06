@@ -1,0 +1,79 @@
+import scipy.io.wavfile as wav
+import scipy.signal as signal
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+import os
+
+
+message = """0000001010101000000000000101000001010000000100100010001000100
+             1011001010101010101010100100100000000000000000000000000000000
+             0000011000000000000000000011010000000000000000000110100000000
+             0000000000101010000000000000000001111100000000000000000000000
+             0000000001100001110001100001100010000000000000110010000110100
+             0110001100001101011111011111011111011111000000000000000000000
+             0000010000000000000000010000000000000000000000000000100000000
+             0000000001111110000000000000111110000000000000000000000011000
+             0110000111000110001000000010000000001000011010000110001110011
+             0101111101111101111101111100000000000000000000000000100000011
+             0000000001000000000001100000000000000010000011000000000011111
+             1000001100000011111000000000011000000000000010000000010000000
+             0100000100000011000000010000000110000110000001000000000011000
+             1000011000000000000000110011000000000000011000100001100000000
+             0110000110000001000000010000001000000001000001000000011000000
+             0010001000000001100000000100010000000001000000010000010000000
+             1000000010000000100000000000011000000000110000000011000000000
+             1000111010110000000000010000000100000000000000100000111110000
+             0000000010000101110100101101100000010011100100111111101110000
+             1110000011011100000000010100000111011001000000101000001111110
+             0100000010100000110000001000001101100000000000000000000000000
+             0000000001110000010000000000000011101010001010101010100111000
+             0000001010101000000000000000010100000000000000111110000000000
+             0000001111111110000000000001110000000111000000000110000000000
+             0110000000110100000000010110000011001100000001100110000100010
+             1000001010001000010001001000100100010000000010001010001000000
+             0000001000010000100000000000010000000001000000000000001001010
+             00000000001111001111101001111000"""
+output_file = 'arecibo.wav'
+
+
+def fftnoise(f):
+    f = np.array(f, dtype='complex')
+    n_p = (len(f) - 1) // 2
+    phases = np.random.rand(n_p) * 2 * np.pi
+    phases = np.cos(phases) + 1j * np.sin(phases)
+    f[1:n_p+1] *= phases
+    f[-1:-1-n_p:-1] = np.conj(f[1:n_p+1])
+    return np.fft.ifft(f).real
+
+def band_limited_noise(min_freq, max_freq, samples, samplerate=1):
+    # Source: https://stackoverflow.com/questions/33933842/how-to-generate-noise-in-frequency-range-with-numpy
+    freqs = np.abs(np.fft.fftfreq(samples, 1/samplerate))
+    f = np.zeros(samples)
+    idx = np.where(np.logical_and(freqs>=min_freq, freqs<=max_freq))[0]
+    f[idx] = 1
+    return fftnoise(f)
+
+
+print("The Arecibo message")
+print("The Arecibo message is an interstellar radio message carrying basic information about humanity and Earth that was sent to globular star cluster M13 in 1974.")
+print("The entire message consisted of 1,679 binary digits, approximately 210 bytes, transmitted at a frequency of 2,380 MHz and modulated by shifting the frequency by 10 Hz, with a power of 450 kW.")
+print()
+
+message = ''.join(i for i in message if i.isdigit())
+print("Original message:")
+print(message)
+print()
+
+# Generate message
+fs = 11025
+f1, f2 = 1000, 1010
+t_sym = 0.1
+data = np.zeros(int(fs * t_sym * len(message)))
+for p in range(len(message)):
+    samples = np.linspace(0, t_sym, int(fs * t_sym), endpoint=False)
+    freq = f2 if message[p] == '1' else f1
+    data[int(fs * t_sym)*p:int(fs * t_sym)*(p + 1)] = 10000*(np.sin(2 * np.pi * freq * samples) + band_limited_noise(50, 5000, len(samples), fs))
+
+wav.write(output_file, fs, np.int16(data))
+print("Sound file '%s' saved" % output_file)
